@@ -1,14 +1,14 @@
-import { Command } from '@tauri-apps/plugin-shell';
+import { invoke } from '@tauri-apps/api/core';
 
 export interface ProcessInfo {
-  pid: number;
+  pid?: number;
   name: string;
-  path?: string;
-  ports: number[];
+  running: boolean;
 }
 
 export class ProcessService {
   private static instance: ProcessService;
+  private checkInterval: number | null = null;
 
   private constructor() {}
 
@@ -21,27 +21,14 @@ export class ProcessService {
 
   async detectGameProcess(): Promise<ProcessInfo | null> {
     try {
-      // 查找APEX游戏进程
-      const result = await Command.create('tasklist', [
-        '/FI',
-        'IMAGENAME eq r5apex.exe',
-        '/FO',
-        'CSV',
-        '/NH'
-      ]).execute();
+      const result = await invoke<{ running: boolean; process_name: string; pid?: number }>('detect_apex_process');
 
-      if (result.stdout.trim()) {
-        const lines = result.stdout.trim().split('\n');
-        if (lines.length > 0) {
-          const parts = lines[0].split(',');
-          const pid = parseInt(parts[1].replace(/"/g, ''));
-
-          return {
-            pid,
-            name: 'r5apex.exe',
-            ports: await this.getProcessPorts(pid),
-          };
-        }
+      if (result.running) {
+        return {
+          pid: result.pid,
+          name: result.process_name,
+          running: true,
+        };
       }
 
       return null;
@@ -51,44 +38,19 @@ export class ProcessService {
     }
   }
 
-  async getProcessPorts(pid: number): Promise<number[]> {
-    try {
-      // 获取进程的网络连接
-      const result = await Command.create('netstat', [
-        '-ano',
-        '-p',
-        'udp'
-      ]).execute();
-
-      const lines = result.stdout.split('\n');
-      const ports = new Set<number>();
-
-      for (const line of lines) {
-        if (line.includes(pid.toString())) {
-          const match = line.match(/:(\d+)/);
-          if (match) {
-            const port = parseInt(match[1]);
-            if (port > 0) {
-              ports.add(port);
-            }
-          }
-        }
-      }
-
-      return Array.from(ports);
-    } catch (error) {
-      console.error('Failed to get process ports:', error);
-      return [];
-    }
-  }
-
   async startMonitoring(callback: (process: ProcessInfo | null) => void): Promise<void> {
-    const checkInterval = setInterval(async () => {
+    this.stopMonitoring();
+
+    this.checkInterval = window.setInterval(async () => {
       const process = await this.detectGameProcess();
       callback(process);
     }, 2000);
+  }
 
-    // 返回清理函数
-    return () => clearInterval(checkInterval);
+  stopMonitoring(): void {
+    if (this.checkInterval !== null) {
+      window.clearInterval(this.checkInterval);
+      this.checkInterval = null;
+    }
   }
 }

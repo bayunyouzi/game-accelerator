@@ -4,8 +4,6 @@ import { Card, Statistic, Row, Col, Tag, Space } from 'antd';
 import {
   CloudServerOutlined,
   ThunderboltOutlined,
-  ArrowUpOutlined,
-  ArrowDownOutlined,
   CheckCircleOutlined,
   CloseCircleOutlined,
   SyncOutlined,
@@ -13,7 +11,7 @@ import {
 } from '@ant-design/icons';
 
 export const StatusBar: React.FC = () => {
-  const { status, latency, uploadSpeed, downloadSpeed, error } = useConnectionStore();
+  const { status, ping, latency, serverName, processRunning, lastEvent, error } = useConnectionStore();
 
   const getStatusConfig = () => {
     switch (status) {
@@ -59,17 +57,17 @@ export const StatusBar: React.FC = () => {
         <Row gutter={16}>
           <Col span={12}>
             <Statistic
-              title="延迟"
-              value={latency}
+              title="Ping"
+              value={ping}
               suffix="ms"
               prefix={<ThunderboltOutlined />}
-              valueStyle={{ color: latency < 50 ? '#3f8600' : latency < 100 ? '#cf1322' : '#faad14' }}
+              valueStyle={{ color: ping < 50 ? '#3f8600' : ping < 100 ? '#1677ff' : '#faad14' }}
             />
           </Col>
           <Col span={12}>
             <Statistic
-              title="服务器"
-              value="香港"
+              title="节点"
+              value={serverName}
               prefix={<CloudServerOutlined />}
             />
           </Col>
@@ -78,21 +76,20 @@ export const StatusBar: React.FC = () => {
         <Row gutter={16}>
           <Col span={12}>
             <Statistic
-              title="上传速度"
-              value={uploadSpeed}
-              suffix="KB/s"
-              prefix={<ArrowUpOutlined />}
-              precision={2}
+              title="延迟"
+              value={latency}
+              suffix="ms"
+              prefix={<ThunderboltOutlined />}
+              valueStyle={{ color: latency < 80 ? '#3f8600' : latency < 150 ? '#1677ff' : '#fa541c' }}
             />
           </Col>
           <Col span={12}>
-            <Statistic
-              title="下载速度"
-              value={downloadSpeed}
-              suffix="KB/s"
-              prefix={<ArrowDownOutlined />}
-              precision={2}
-            />
+            <Space direction="vertical" size={4}>
+              <Tag color={processRunning ? 'success' : 'default'}>
+                {processRunning ? 'APEX 运行中' : 'APEX 未启动'}
+              </Tag>
+              <Tag color="blue">{lastEvent}</Tag>
+            </Space>
           </Col>
         </Row>
       </Space>

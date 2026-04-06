@@ -15,7 +15,7 @@ export const Header: React.FC = () => {
     }}>
       <RocketOutlined style={{ fontSize: '24px', color: '#1890ff', marginRight: '12px' }} />
       <Title level={3} style={{ margin: 0, color: '#fff' }}>
-        游戏加速器
+        APEX 游戏加速器 MVP
       </Title>
     </AntHeader>
   );

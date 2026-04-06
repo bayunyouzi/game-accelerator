@@ -1,0 +1,428 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>APEX 游戏加速器 MVP</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      max-width: 1080px;
+      margin: 32px auto;
+      padding: 0 16px 40px;
+      color: #0f172a;
+      background: #f8fafc;
+    }
+
+    .card {
+      background: #ffffff;
+      border: 1px solid #e5e7eb;
+      border-radius: 12px;
+      padding: 20px;
+      margin-bottom: 16px;
+      box-shadow: 0 4px 12px rgba(15, 23, 42, 0.06);
+    }
+
+    .hero {
+      background: linear-gradient(135deg, #0f172a, #1d4ed8);
+      color: #fff;
+    }
+
+    h1, h2 {
+      margin-top: 0;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      gap: 16px;
+    }
+
+    .grid-4 {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 16px;
+      margin-bottom: 16px;
+    }
+
+    .metric {
+      font-size: 28px;
+      font-weight: bold;
+      margin: 8px 0 0;
+    }
+
+    .row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      margin: 12px 0;
+    }
+
+    input, button, textarea {
+      font: inherit;
+    }
+
+    input, textarea {
+      width: 100%;
+      box-sizing: border-box;
+      border: 1px solid #cbd5e1;
+      border-radius: 8px;
+      padding: 10px 12px;
+      background: #fff;
+    }
+
+    button {
+      border: 0;
+      border-radius: 8px;
+      padding: 10px 14px;
+      background: #2563eb;
+      color: #fff;
+      cursor: pointer;
+    }
+
+    button.secondary {
+      background: #475569;
+    }
+
+    .status {
+      font-weight: bold;
+    }
+
+    .ok {
+      color: #15803d;
+    }
+
+    .error {
+      color: #b91c1c;
+    }
+
+    .log {
+      background: #0f172a;
+      color: #e2e8f0;
+      border-radius: 8px;
+      padding: 12px;
+      min-height: 240px;
+      white-space: pre-wrap;
+      overflow: auto;
+    }
+
+    code {
+      background: #e2e8f0;
+      padding: 2px 6px;
+      border-radius: 6px;
+    }
+
+    .hero code {
+      background: rgba(255, 255, 255, 0.15);
+      color: #fff;
+    }
+
+    .muted {
+      color: #475569;
+    }
+
+    .tag {
+      display: inline-block;
+      padding: 4px 10px;
+      border-radius: 999px;
+      background: #dbeafe;
+      color: #1d4ed8;
+      font-size: 12px;
+      margin-right: 8px;
+      margin-top: 8px;
+    }
+  </style>
+</head>
+<body>
+  <div class="card hero">
+    <h1>APEX 游戏加速器 MVP</h1>
+    <p>当前只有 1 台 Zeabur 香港节点，先把 APEX 的节点状态、配置下发和测试链路跑通。</p>
+    <p>当前节点 IP: <code>43.128.8.167</code></p>
+    <span class="tag">仅支持 APEX</span>
+    <span class="tag">Zeabur 单节点</span>
+    <span class="tag">MVP 阶段</span>
+  </div>
+
+  <div class="grid">
+    <div class="card">
+      <h2>节点状态</h2>
+      <p class="muted">当前在线节点数量</p>
+      <div id="nodeCount" class="metric">-</div>
+    </div>
+    <div class="card">
+      <h2>支持游戏</h2>
+      <p class="muted">当前可用游戏数量</p>
+      <div id="gameCount" class="metric">-</div>
+    </div>
+    <div class="card">
+      <h2>连接状态</h2>
+      <p class="muted">浏览器与控制通道连接状态</p>
+      <div id="connectState" class="metric">未连接</div>
+    </div>
+  </div>
+
+  <div class="grid-4">
+    <div class="card">
+      <h2>Ping</h2>
+      <p class="muted">最近一次心跳往返</p>
+      <div id="pingValue" class="metric">-</div>
+    </div>
+    <div class="card">
+      <h2>延迟</h2>
+      <p class="muted">最近一次延迟检测</p>
+      <div id="latencyValue" class="metric">-</div>
+    </div>
+    <div class="card">
+      <h2>最近状态</h2>
+      <p class="muted">最近一次连接事件</p>
+      <div id="lastEvent" class="metric" style="font-size: 18px;">未开始</div>
+    </div>
+    <div class="card">
+      <h2>最后更新</h2>
+      <p class="muted">最近一次消息时间</p>
+      <div id="lastUpdated" class="metric" style="font-size: 18px;">-</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>当前可做什么</h2>
+    <p>1. 查看香港节点是否在线</p>
+    <p>2. 获取 APEX 的基础连接配置</p>
+    <p>3. 测试 WebSocket 控制通道和延迟回包</p>
+    <p>4. 为后续 Windows 客户端接入保留接口</p>
+  </div>
+
+  <div class="card">
+    <h2>APEX 配置</h2>
+    <div id="apexConfig" class="log"></div>
+  </div>
+
+  <div class="card">
+    <h2>控制通道测试</h2>
+    <label for="wsUrl">WebSocket 地址</label>
+    <input id="wsUrl" type="text">
+    <div class="row">
+      <button id="connectBtn">连接</button>
+      <button id="disconnectBtn" class="secondary">断开</button>
+      <button id="pingBtn">Ping</button>
+      <button id="latencyBtn">测延迟</button>
+      <button id="statusBtn" class="secondary">拉取状态</button>
+      <button id="configBtn" class="secondary">拉取 APEX 配置</button>
+      <button id="clearBtn" class="secondary">清空日志</button>
+    </div>
+    <p>当前状态: <span id="status" class="status">未连接</span></p>
+  </div>
+
+  <div class="card">
+    <h2>自定义消息</h2>
+    <textarea id="messageInput" rows="4">{"type":"custom","message":"hello from browser"}</textarea>
+    <div class="row">
+      <button id="sendBtn">发送消息</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>日志</h2>
+    <div id="log" class="log"></div>
+  </div>
+
+  <script>
+    const logEl = document.getElementById('log');
+    const statusEl = document.getElementById('status');
+    const connectStateEl = document.getElementById('connectState');
+    const wsUrlEl = document.getElementById('wsUrl');
+    const messageInputEl = document.getElementById('messageInput');
+    const nodeCountEl = document.getElementById('nodeCount');
+    const gameCountEl = document.getElementById('gameCount');
+    const apexConfigEl = document.getElementById('apexConfig');
+    const pingValueEl = document.getElementById('pingValue');
+    const latencyValueEl = document.getElementById('latencyValue');
+    const lastEventEl = document.getElementById('lastEvent');
+    const lastUpdatedEl = document.getElementById('lastUpdated');
+
+    const wsProtocol = location.protocol === 'https:' ? 'wss' : 'ws';
+    const defaultWsUrl = `${wsProtocol}://${location.host}/ws`;
+    wsUrlEl.value = defaultWsUrl;
+
+    let socket = null;
+    let pendingPingAt = 0;
+    let pendingLatencyAt = 0;
+
+    function setStatus(text, className) {
+      statusEl.textContent = text;
+      statusEl.className = `status ${className || ''}`.trim();
+      connectStateEl.textContent = text;
+      lastEventEl.textContent = text;
+      lastUpdatedEl.textContent = new Date().toLocaleTimeString();
+    }
+
+    function setMetric(element, value) {
+      element.textContent = typeof value === 'number' ? `${value} ms` : value;
+    }
+
+    function log(message, type) {
+      const now = new Date().toLocaleTimeString();
+      logEl.textContent += `[${now}] ${message}\n`;
+      if (type === 'error') {
+        logEl.textContent += '\n';
+      }
+      logEl.scrollTop = logEl.scrollHeight;
+      lastUpdatedEl.textContent = now;
+    }
+
+    async function fetchStatus() {
+      try {
+        const response = await fetch('/api/status');
+        const payload = await response.json();
+        nodeCountEl.textContent = payload.node ? '1' : '0';
+        gameCountEl.textContent = Array.isArray(payload.supportedGames) ? String(payload.supportedGames.length) : '0';
+        lastEventEl.textContent = payload.node?.status || 'unknown';
+        log(`节点状态: ${payload.node.name} / ${payload.node.publicIp} / ${payload.node.status}`);
+      } catch (error) {
+        log(`HTTP 请求失败: ${error.message}`, 'error');
+      }
+    }
+
+    async function fetchApexConfig() {
+      try {
+        const response = await fetch('/api/config/apex');
+        const payload = await response.json();
+        apexConfigEl.textContent = JSON.stringify(payload, null, 2);
+        log('已拉取 APEX 配置');
+      } catch (error) {
+        log(`获取 APEX 配置失败: ${error.message}`, 'error');
+      }
+    }
+
+    function connect() {
+      if (socket && socket.readyState === WebSocket.OPEN) {
+        log('WebSocket 已连接');
+        return;
+      }
+
+      const targetUrl = wsUrlEl.value.trim() || defaultWsUrl;
+      log(`开始连接 ${targetUrl}`);
+      setStatus('连接中', '');
+
+      socket = new WebSocket(targetUrl);
+
+      socket.onopen = () => {
+        setStatus('已连接', 'ok');
+        lastEventEl.textContent = '控制通道已建立';
+        log('WebSocket 连接成功');
+      };
+
+      socket.onmessage = (event) => {
+        log(`收到消息: ${event.data}`);
+
+        try {
+          const payload = JSON.parse(event.data);
+          if (payload.type === 'status' && payload.payload) {
+            nodeCountEl.textContent = payload.payload.node ? '1' : '0';
+            gameCountEl.textContent = Array.isArray(payload.payload.supportedGames) ? String(payload.payload.supportedGames.length) : '0';
+            lastEventEl.textContent = '已同步节点状态';
+          }
+
+          if (payload.type === 'apex_config' && payload.payload) {
+            apexConfigEl.textContent = JSON.stringify(payload.payload, null, 2);
+            lastEventEl.textContent = '已同步 APEX 配置';
+          }
+
+          if (payload.type === 'pong') {
+            const ping = pendingPingAt ? Math.max(1, Date.now() - pendingPingAt) : '-';
+            if (typeof ping === 'number') {
+              setMetric(pingValueEl, ping);
+            }
+            pendingPingAt = 0;
+            lastEventEl.textContent = 'Ping 已更新';
+          }
+
+          if (payload.type === 'latency_result') {
+            const latency = pendingLatencyAt ? Math.max(1, Date.now() - pendingLatencyAt) : '-';
+            if (typeof latency === 'number') {
+              setMetric(latencyValueEl, latency);
+            }
+            pendingLatencyAt = 0;
+            lastEventEl.textContent = '延迟已更新';
+          }
+        } catch (_error) {
+          // Ignore non-JSON messages in the UI layer.
+        }
+      };
+
+      socket.onerror = () => {
+        setStatus('连接异常', 'error');
+        log('WebSocket 发生错误', 'error');
+      };
+
+      socket.onclose = (event) => {
+        setStatus('已断开', event.wasClean ? '' : 'error');
+        lastEventEl.textContent = event.reason || '连接已关闭';
+        log(`连接关闭 code=${event.code} reason=${event.reason || 'none'}`);
+      };
+    }
+
+    function disconnect() {
+      if (!socket) {
+        log('当前没有活动连接');
+        return;
+      }
+
+      socket.close(1000, 'manual close');
+    }
+
+    function sendJson(payload) {
+      if (!socket || socket.readyState !== WebSocket.OPEN) {
+        log('请先建立 WebSocket 连接', 'error');
+        return;
+      }
+
+      socket.send(JSON.stringify(payload));
+      log(`发送消息: ${JSON.stringify(payload)}`);
+    }
+
+    document.getElementById('connectBtn').addEventListener('click', connect);
+    document.getElementById('disconnectBtn').addEventListener('click', disconnect);
+    document.getElementById('pingBtn').addEventListener('click', () => {
+      pendingPingAt = Date.now();
+      sendJson({ type: 'ping', timestamp: Date.now() });
+    });
+    document.getElementById('latencyBtn').addEventListener('click', () => {
+      pendingLatencyAt = Date.now();
+      sendJson({ type: 'latency_check', timestamp: Date.now() });
+    });
+    document.getElementById('configBtn').addEventListener('click', () => {
+      if (socket && socket.readyState === WebSocket.OPEN) {
+        sendJson({ type: 'get_apex_config' });
+        return;
+      }
+
+      fetchApexConfig();
+    });
+    document.getElementById('sendBtn').addEventListener('click', () => {
+      try {
+        const payload = JSON.parse(messageInputEl.value);
+        sendJson(payload);
+      } catch (error) {
+        log(`JSON 格式错误: ${error.message}`, 'error');
+      }
+    });
+    document.getElementById('statusBtn').addEventListener('click', () => {
+      if (socket && socket.readyState === WebSocket.OPEN) {
+        sendJson({ type: 'get_status' });
+        return;
+      }
+
+      fetchStatus();
+    });
+    document.getElementById('clearBtn').addEventListener('click', () => {
+      logEl.textContent = '';
+    });
+
+    fetchStatus();
+    fetchApexConfig();
+    setMetric(pingValueEl, '-');
+    setMetric(latencyValueEl, '-');
+  </script>
+</body>
+</html>

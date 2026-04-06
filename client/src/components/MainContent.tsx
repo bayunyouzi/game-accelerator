@@ -1,9 +1,8 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useConnectionStore } from '../store/connectionStore';
-import { ProxyService } from '../services/proxy';
 import { ConnectionService } from '../services/connection';
 import { ProcessService } from '../services/process';
-import { Card, Button, Space, Alert, Progress, Typography, Divider } from 'antd';
+import { Card, Button, Space, Alert, Progress, Typography, Divider, Descriptions, Tag } from 'antd';
 import {
   PlayCircleOutlined,
   StopOutlined,
@@ -14,41 +13,78 @@ import {
 
 const { Title, Text } = Typography;
 
-export const MainContent: React.FC = () => {
-  const { status, setStatus, setError, reset } = useConnectionStore();
-  const [isMonitoring, setIsMonitoring] = useState(false);
-  const [gameDetected, setGameDetected] = useState(false);
+const STATUS_URL = 'https://youxi.zeabur.app/api/status';
+const APEX_CONFIG_URL = 'https://youxi.zeabur.app/api/config/apex';
+const WS_URL = 'wss://youxi.zeabur.app/ws';
 
-  const proxyService = ProxyService.getInstance();
+export const MainContent: React.FC = () => {
+  const {
+    status,
+    ping,
+    latency,
+    serverName,
+    processRunning,
+    processPid,
+    websocketUrl,
+    lastEvent,
+    setStatus,
+    setError,
+    reset,
+    updatePing,
+    updateLatency,
+    setServerName,
+    setProcessStatus,
+    setWebsocketUrl,
+    setLastEvent,
+  } = useConnectionStore();
+
+  const [config, setConfig] = useState<any | null>(null);
+  const [statusLoaded, setStatusLoaded] = useState(false);
   const connectionService = ConnectionService.getInstance();
   const processService = ProcessService.getInstance();
+
+  const loadRemoteStatus = async () => {
+    const response = await fetch(STATUS_URL);
+    const payload = await response.json();
+    setServerName(payload.node?.name || '香港 APEX 节点');
+    setWebsocketUrl(payload.websocketUrl || WS_URL);
+    setStatusLoaded(true);
+  };
+
+  const loadApexConfig = async () => {
+    const response = await fetch(APEX_CONFIG_URL);
+    const payload = await response.json();
+    setConfig(payload);
+    setWebsocketUrl(payload.connection?.websocketUrl || WS_URL);
+  };
 
   const handleStart = async () => {
     try {
       setStatus('connecting');
       setError('');
+      setLastEvent('正在连接节点');
 
-      // 配置系统代理
-      await proxyService.setProxy('127.0.0.1', 7890);
-
-      // 连接到服务器
       await connectionService.connect({
-        host: '43.128.8.167',
-        port: 7890,
-        protocol: 'tcp'
+        websocketUrl,
+        statusUrl: STATUS_URL
+      }, {
+        onPing: (value) => updatePing(value),
+        onLatency: (value) => updateLatency(value),
+        onStatus: (event) => setLastEvent(event),
+        onConfig: (payload) => setConfig(payload),
       });
 
       setStatus('connected');
+      setLastEvent('控制通道已连接');
+      connectionService.requestStatus();
+      connectionService.requestApexConfig();
 
-      // 开始监控游戏进程
-      setIsMonitoring(true);
       await processService.startMonitoring((process) => {
-        setGameDetected(process !== null);
+        setProcessStatus(!!process, process?.pid);
       });
-
     } catch (error) {
       console.error('Failed to start:', error);
-      setError('启动失败，请检查网络连接');
+      setError('启动失败，请检查节点连接');
       setStatus('error');
       await handleStop();
     }
@@ -56,21 +92,48 @@ export const MainContent: React.FC = () => {
 
   const handleStop = async () => {
     try {
-      setIsMonitoring(false);
-
-      // 断开连接
+      processService.stopMonitoring();
       connectionService.disconnect();
-
-      // 清除系统代理
-      await proxyService.clearProxy();
-
       reset();
-      setGameDetected(false);
     } catch (error) {
       console.error('Failed to stop:', error);
       setError('停止失败');
     }
   };
+
+  const handleRefresh = async () => {
+    try {
+      await loadRemoteStatus();
+      await loadApexConfig();
+      const process = await processService.detectGameProcess();
+      setProcessStatus(!!process, process?.pid);
+      setLastEvent('已刷新节点与进程状态');
+    } catch (error) {
+      console.error('Failed to refresh:', error);
+      setError('刷新失败');
+    }
+  };
+
+  useEffect(() => {
+    const bootstrap = async () => {
+      try {
+        await loadRemoteStatus();
+        await loadApexConfig();
+        const process = await processService.detectGameProcess();
+        setProcessStatus(!!process, process?.pid);
+      } catch (error) {
+        console.error('Failed to bootstrap client:', error);
+        setError('初始化失败，请检查服务端');
+      }
+    };
+
+    void bootstrap();
+
+    return () => {
+      processService.stopMonitoring();
+      connectionService.disconnect();
+    };
+  }, []);
 
   const getProgressStatus = () => {
     switch (status) {
@@ -155,14 +218,26 @@ export const MainContent: React.FC = () => {
               >
                 停止加速
               </Button>
+              <Button size="large" onClick={handleRefresh}>
+                刷新状态
+              </Button>
             </Space>
           </div>
 
-          {gameDetected && (
+          {processRunning && (
             <Alert
               message="检测到APEX游戏正在运行"
-              description="游戏流量已自动加速"
+              description={`进程已识别${processPid ? `，PID: ${processPid}` : ''}`}
               type="success"
+              showIcon
+            />
+          )}
+
+          {!processRunning && statusLoaded && (
+            <Alert
+              message="暂未检测到 APEX"
+              description="请先启动 APEX，客户端会继续轮询检测 r5apex.exe"
+              type="info"
               showIcon
             />
           )}
@@ -170,11 +245,33 @@ export const MainContent: React.FC = () => {
           {status === 'error' && (
             <Alert
               message="连接失败"
-              description="请检查网络连接或联系管理员"
+              description="请检查节点连接或稍后重试"
               type="error"
               showIcon
               closable
             />
+          )}
+
+          <Descriptions bordered size="small" column={1} title="当前状态">
+            <Descriptions.Item label="节点">{serverName}</Descriptions.Item>
+            <Descriptions.Item label="WebSocket">{websocketUrl}</Descriptions.Item>
+            <Descriptions.Item label="最近状态">{lastEvent}</Descriptions.Item>
+            <Descriptions.Item label="Ping">{ping ? `${ping} ms` : '未测量'}</Descriptions.Item>
+            <Descriptions.Item label="延迟">{latency ? `${latency} ms` : '未测量'}</Descriptions.Item>
+            <Descriptions.Item label="APEX 进程">
+              {processRunning ? <Tag color="success">运行中</Tag> : <Tag>未启动</Tag>}
+            </Descriptions.Item>
+            <Descriptions.Item label="检测进程名">r5apex.exe</Descriptions.Item>
+          </Descriptions>
+
+          {config && (
+            <Descriptions bordered size="small" column={1} title="APEX 节点配置">
+              <Descriptions.Item label="游戏">{config.game?.name || 'APEX Legends'}</Descriptions.Item>
+              <Descriptions.Item label="节点 IP">{config.node?.publicIp || '43.128.8.167'}</Descriptions.Item>
+              <Descriptions.Item label="控制地址">{config.connection?.websocketUrl || websocketUrl}</Descriptions.Item>
+              <Descriptions.Item label="健康检查">{config.connection?.healthUrl || STATUS_URL}</Descriptions.Item>
+              <Descriptions.Item label="当前说明">{config.clientPlan?.zeaburOnlyLimit || 'MVP 模式'}</Descriptions.Item>
+            </Descriptions>
           )}
         </Space>
 
@@ -183,10 +280,10 @@ export const MainContent: React.FC = () => {
         <div style={{ textAlign: 'center' }}>
           <Space direction="vertical">
             <Text type="secondary">
-              服务器: 香港 (43.128.8.167:7890)
+              节点: 香港 (43.128.8.167)
             </Text>
             <Text type="secondary">
-              支持游戏: APEX
+              支持游戏: APEX Legends
             </Text>
           </Space>
         </div>
