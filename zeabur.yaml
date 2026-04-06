@@ -1,0 +1,27 @@
+# Zeabur部署配置
+services:
+  # 服务器端服务
+  - name: game-accelerator-server
+    type: dockerfile
+    dockerfilePath: ./server/Dockerfile
+    env:
+      - SERVER_IP=43.128.8.167
+      - SERVER_PORT=7890
+      - LOG_LEVEL=info
+    ports:
+      - port: 7890
+        protocol: TCP
+        public: true
+    healthCheck:
+      http:
+        path: /
+        port: 7890
+        interval: 30s
+        timeout: 10s
+        retries: 3
+
+# 预设配置
+presets:
+  # Node.js环境（用于客户端构建）
+  - name: nodejs
+    version: '20'
